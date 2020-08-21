@@ -1,0 +1,31 @@
+# 08.20.20
+LOH analysis workflow
+
+# step 1
+cat ../../bam_directories/batch3_germline_paths.tsv | awk '{print "bash normal_loh_analysis.sh "$1" "$2""}' | /bin/bash
+
+# inputs: tsv with 1. normal sample names 2. germline results dir
+
+# outputs:
+1. snps.vcf.gz snps.vcf.gz.tbi # select only SNPs from germline vcf
+2. snps.table # all germline snps # convert snps.vcf to table
+3. het.snps.table # only snps with 40% < VAF > 60%  # then separated by chromosome
+4. het.positions.txt # bed format of snp coordinately # then separated by chromosome
+
+# step 2
+cat ../../bam_directories/final_names_somatic_exome_dirs.tsv | sed -n '62,91p' | awk '{print "bash tumor_loh_analysis.sh "$1" "$3""}' | /bin/bash
+
+# inputs: tsv with 1. tumor sample names 2. somatic exome model name 3. somatic exome results dir
+
+# outputs:
+1. tumor.bam tumor.bam.bai # convert tumor.cram to bam # temp files
+2. chr.tumor.readcounts.tsv # run bam-readcount on bam file # run once per chromosome
+3. chr.tumor.VAFs.table # convert readcounts to VAFs
+
+# step 3
+# create plots
+
+# final files needed for plotting
+1. chr.het.snps.table # germline
+2. chr.tumor.VAFs.table # tumor
+
