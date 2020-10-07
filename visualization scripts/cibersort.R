@@ -7,32 +7,41 @@ library(viridis)
 library(RColorBrewer)
 
 # set wd
-setwd("~/Desktop/GBM/immune_infiltration/cibersort_new_rna/")
-input_file <- "CIBERSORT.Output_Job9.xlsx"
+setwd("~/Desktop/GBM/immune_infiltration/cibersort/")
+input_file <- "CIBERSORT.Output_strandfix.xlsx"
 
-format_names <- function(name) {
-    if ( grepl("Re", name) ) {
-        if ( grepl("Primary", name) ) {
-            new_name <- "Re.GBM065-primary"
-            #tumor <- "GBM065"
-        } else {
-        new_name <-  paste(paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = "."), str_sub(name, -1, -1), sep = '-')
-        #tumor <- paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = ".")
-        }
-    } else if ( grepl("^19-0", name) ) {
-        new_name <- mgsub(name, c("19-\\d*_", "Tumor", "_"), c("", "", "-"))
-        #tumor <- unlist(strsplit(new_name, '-'))[1]
-    } else if ( grepl("Re", name) == FALSE ) {
-        new_name <- paste(unlist(str_split(name, '-'))[2], str_sub(name, -1, -1), sep = '-')
-        #tumor <- unlist(str_split(name, '-'))[2]
-    }
-    return(new_name)
+# format_names <- function(name) {
+#     if ( grepl("Re", name) ) {
+#         if ( grepl("Primary", name) ) {
+#             new_name <- "Re.GBM065-primary"
+#             #tumor <- "GBM065"
+#         } else {
+#         new_name <-  paste(paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = "."), str_sub(name, -1, -1), sep = '-')
+#         #tumor <- paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = ".")
+#         }
+#     } else if ( grepl("^19-0", name) ) {
+#         new_name <- mgsub(name, c("19-\\d*_", "Tumor", "_"), c("", "", "-"))
+#         #tumor <- unlist(strsplit(new_name, '-'))[1]
+#     } else if ( grepl("Re", name) == FALSE ) {
+#         new_name <- paste(unlist(str_split(name, '-'))[2], str_sub(name, -1, -1), sep = '-')
+#         #tumor <- unlist(str_split(name, '-'))[2]
+#     }
+#     return(new_name)
+# }
+
+get_gbm_order <- function(vector) {
+    re_samples <- unique(vector[grepl("Re", vector)])
+    not_re_samples <- unique(vector[!grepl("Re", vector)])
+    sample_order <- c(not_re_samples, re_samples)
+    tumor_order <- unique(sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-2))))
+    order_list <- list(sample_order, tumor_order)
+    return(sample_order)
 }
 
 # open cibersort results
 df <- as.data.frame(read_excel(input_file))
 # format sample names
-df$`Input Sample` <- sapply(df$`Input Sample`, format_names)
+#df$`Input Sample` <- sapply(df$`Input Sample`, format_names)
 # subset df to reflect cell types
 df_celltypes <- subset(df, select = -c(`P-value`, `Pearson Correlation`, RMSE))
 # levels - ordering by mean cell fraction
@@ -43,15 +52,8 @@ df_celltypes.reorder <- df_celltypes[c("Input Sample", cell_levels)]
 df_celltypes.tidy <- gather(df_celltypes.reorder, key = `Cell Type`, value = Proportion, -`Input Sample`)
 # change the order of the legend based on proportion
 df_celltypes.tidy$`Cell Type` <- factor(df_celltypes.tidy$`Cell Type`, levels = unique(df_celltypes.tidy$`Cell Type`))
-
-### THIS ONLY RELEVANT FOR GBM ###
-# change order of the Samples
-# correctly order GBM p vs. r
-recurrent_samples <- sort(as.character(unique(df_celltypes.tidy[grep("Re", df_celltypes.tidy$`Input Sample`), ]$`Input Sample`)))
-not_recurrent_samples <- sort(as.character(unique(filter(df_celltypes.tidy, !`Input Sample` %in% recurrent_samples)$`Input Sample`)))
-sample_order <- c(not_recurrent_samples, recurrent_samples)
 # create levels and change order of df
-df_celltypes.tidy$`Input Sample` <- factor(df_celltypes.tidy$`Input Sample`, levels = sample_order)
+df_celltypes.tidy$`Input Sample` <- factor(df_celltypes.tidy$`Input Sample`, levels = get_gbm_order(unique(df_celltypes.tidy$`Input Sample`)))
 df_celltypes.tidy <- df_celltypes.tidy[order(df_celltypes.tidy$`Input Sample`), ]
 ###
 
@@ -61,11 +63,11 @@ colnames(df_celltypes.tidy) <- c("Samples", "Cell Type", "Proportion")
 # create a color palette 
 getPalette = colorRampPalette(brewer.pal(12, "Set3"))
 color_palette <- plasma(22)
-my_pal <- c(pal_nejm("default", alpha = 0.7)(7), pal_npg("nrc", alpha = 0.7)(10), pal_simpsons("springfield", alpha = 0.8)(5))
+my_pal <- c(pal_nejm("default")(7), pal_npg("nrc")(10), pal_simpsons("springfield")(5))
 
 # make a stacked bar plot showing proportions of cell types per sample
 # really messy because 22 cell types
-ggplot(df_celltypes.tidy, aes(x=Samples, y=Proportion, fill=`Cell Type`)) + geom_bar(stat="identity", width=0.95)+ theme(legend.position="top", axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill=guide_legend(title="Cell Type")) + scale_fill_manual(values = my_pal)
+ggplot(df_celltypes.tidy, aes(x=Samples, y=Proportion, fill=`Cell Type`)) + geom_bar(stat="identity", width=0.95)+ theme(legend.position="top", axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill=guide_legend(title="Cell Type")) + scale_fill_manual(values = color_palette)
 
 #### COMBINE CELL TYPES FOR CLEARER PLOT ####
 # make these into lists
@@ -73,8 +75,8 @@ ggplot(df_celltypes.tidy, aes(x=Samples, y=Proportion, fill=`Cell Type`)) + geom
 CD8_cells <- list("CD8+ T cells", "T cells CD8")
 CD4_cells <- list("CD4+ T cells", "T cells CD4 memory activated", "T cells CD4 naive", "T cells CD4 memory resting", "T cells follicular helper")
 B_cells <- list("B cells", "B cells naive", "B cells memory")
-NK_cells <- list("NK Cells", "NK cells resting", "NK cells activated")
-DC_cells <- list("DC Cells", "Dendritic cells activated", "Dendritic cells resting")
+NK_cells <- list("NK cells", "NK cells resting", "NK cells activated")
+DC_cells <- list("DC cells", "Dendritic cells activated", "Dendritic cells resting")
 Macrophages <- list("Macrophages", "Macrophages M0", "Macrophages M1", "Macrophages M2")
 Monocytes <- list("Monocytes")
 Other <- list("Other", "Neutrophils", "Eosinophils", "Mast cells activated", "Mast cells resting", "Plasma cells", "T cells gamma delta", "T cells regulatory (Tregs)")
@@ -97,8 +99,24 @@ for ( item in samples ) {
     total_df <- rbind(total_df, sample_df)
 }
 
+#total_df.s <- spread(total_df, key=`Cell Type`, value=Proportion)
+# levels - ordering by mean cell fraction
+#cell_levels <- names(sort(apply(total_df.s[,2:ncol(total_df.s)], 2, mean),decreasing = TRUE))
+# change the order of the legend based on preference
+total_df$`Cell Type` <- factor(total_df$`Cell Type`, levels = c("CD8+ T cells", "CD4+ T cells", "Monocytes", "Macrophages", "B cells", "DC cells","NK cells", "Other"))
+# change the order of the samples
+total_df$Samples <- factor(total_df$Samples, levels = get_gbm_order(unique(total_df$Samples)))
+
 # adjusted color palette
 my_pal <- c(pal_nejm("default", alpha = 1)(7), "grey60")
 # make a stacked bar plot showing proportions of cell types per sample
 ggplot(total_df, aes(x=Samples, y=Proportion, fill=`Cell Type`)) + geom_bar(stat="identity", width=0.95)+ theme(legend.position="top", axis.text.x = element_text(angle = 65, hjust = 1), text = element_text(size=12)) + guides(fill=guide_legend(title="Cell Type")) + scale_fill_manual(values = my_pal) 
+
+# to create Heatmap
+total_df.s <- column_to_rownames(spread(total_df, key=`Cell Type`, value=Proportion), loc=1)
+total_df.t <- as.matrix(t(total_df.s))
+# plot!
+Heatmap(total_df.t, name = "Relative cell abundance", row_order = c("CD8+ T cells", "CD4+ T cells", "Monocytes", "Macrophages", "B cells", "DC cells","NK cells", "Other"), column_order = get_gbm_order(unique(total_df$Samples)), width = unit(28, "cm"), height = unit(4, "cm"))
+# column_order = gsub('-', '\\.', gbm_order)
+
 

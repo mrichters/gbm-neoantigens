@@ -11,52 +11,45 @@ library(rapportools)
 library(wesanderson)
 library(ggdendro)
 library(gridExtra)
+library(colorRamps)
 
 # set wd
 setwd("~/Desktop/GBM/immune_infiltration/")
 ## for expression: log2(fpkm+0.001) / log2(tpm+0.001)
 
-# 11.12.19
+# 9.21.20
 ######### KALLISTO GENE EXPRESSION EXCEL FILE TO MATRIX FOR XCELL AND CIBERSORT ###########
-# get all sample names (which are the excel sheet names) from excel file
-excel_file <- "kallisto_abundance_matrix.xlsx"
-samples <- excel_sheets(path = excel_file)
-gene_set <- sort(unique(as.data.frame(read_excel(excel_file))$gene_name))
-# read in all sheets from excel file to final df
-abundance_df.matrix <- data.frame(Genes = gene_set)
-for ( name in samples ) {
-  df <- as.data.frame(read_excel(excel_file, sheet=name))
-  df.subset <- df[, c("sample", "gene_name", "abundance")]
-  abundance_df.sample <- data.frame()
-  # average same gene abudances so that i can spread data without duplicates
-  for ( gene in gene_set ) {
-    gene_info <- df.subset[grep(paste("^", gene, "$", sep = "" ), df.subset$gene_name, perl=TRUE), ]
-    if ( nrow(gene_info) > 1 ) {
-      average <- mean(gene_info$abundance)
-      new_line <- as.data.frame(cbind(sample = unique(gene_info$sample), gene_name = gene, abundance = average))
-      new_line$abundance <- as.numeric(levels(new_line$abundance))[new_line$abundance]
-    } else {
-      new_line <- gene_info
-    }
-    abundance_df.sample <- rbind(abundance_df.sample, new_line)
-  }
-  print(unique(gene_info$sample))
-  colnames(abundance_df.sample) <- replace(colnames(abundance_df.sample), colnames(abundance_df.sample)=="gene_name", "Genes") 
-  abundance_df.sample.format <- spread(abundance_df.sample, key = sample, value = abundance)
-  abundance_df.matrix <- merge(abundance_df.matrix, abundance_df.sample.format)
-}
+excel_file <- read_excel("kallisto_abundance_matrix_strandfix.xlsx")
+samples <- names(excel_file[,2:ncol(excel_file)])
+# filter kallisto file by danaher gene set
+dgene <- read_excel("danaher_analysis/danaher_gene_set.xlsx")
+excel_file <- filter(excel_file, gene_name %in% dgene$Gene)
+# merge two files to include Cell Types
+final_df <- merge(dgene, excel_file, by.x = "Gene", by.y = "gene_name")
+# which gene not present in kallisto output?
+not_included_sample <- filter(dgene, !Gene %in% excel_file$gene_name)
+# log2 + 1 transform final_df
+final_df_norm <- data.frame(final_df[,c(1:2)], sapply(final_df[samples], function(x) log2(x + 1)))
+# get sample order
+gbm_order <- get_gbm_order(samples)
+# gather samples to average expression per cell type
+final_gather <- gather(final_df_norm, key="Samples", value="Norm. Expression", -Gene, -Cell.Type)
+# average expression
+avg_cell_types <- final_gather %>% group_by(Cell.Type, Samples) %>% summarize(`Avg. Norm. Expression` = median(`Norm. Expression`))
+# spread and create matrix
+final_spread <- spread(avg_cell_types, key=Samples, value=`Avg. Norm. Expression`)
+# matrix for ComplexHeatmap
+final_spread_matrix <- as.matrix(column_to_rownames(final_spread, var = "Cell.Type"))
+# row order (cell similarity grouping)
+row_order <- c("B-cells", "CD45", "CD8 T cells", "Cytotoxic cells", "Exhausted CD8", "T-cells", "Th1 cells", "Treg", "DC", "Macrophages", "Mast cells", "Neutrophils", "NK cells", "NK CD56dim cells")
+# create Heatmap!
+Heatmap(final_spread_matrix, name = "log2(TPM + 1)", row_order = row_order, width = unit(28, "cm"), height = unit(8, "cm"))
+# column_order = gsub('-', '\\.', gbm_order)
 
-# change cell categories to row names
-#abundance_df.matrix <- column_to_rownames(abundance_df.matrix, loc=1)
-rownames(abundance_df.matrix) <- abundance_df.matrix[,1]
-abundance_df.matrix <- abundance_df.matrix[, -c(1)]
-
-# write df to excel file
-write.table(abundance_df.matrix, "abundance_matrix_all_genes.txt", row.names=T, sep = '\t', quote=F)
 
 
 # 11.11.19
-######### POLE PATIENT ALL TUMORS ABUNDANCE MATRIX ##########
+#### POLE PATIENT ALL TUMORS ABUNDANCE MATRIX ####
 pole_file <- read_delim("matrix.abundance.tsv", '\t')
 new_colnames <- replace(colnames(pole_file), colnames(pole_file)=="X1", "Genes")
 colnames(pole_file) <- new_colnames
@@ -96,49 +89,35 @@ for ( name in samples ) {
     abundance_df <- rbind(abundance_df, new_line)
   }
 }
+####
 
-# 3.4.20
-######## READ IN GBM DANAHER RESULTS FOR CREAING HEATMAP #########
+
 # functions - get correct sample order
-get_gbm_order <- function(df) {
-    recurrent_samples <- as.character(unique(df[grep("Re", df$Samples), ]$Samples))
-    not_recurrent_samples <- as.character(unique(filter(df, !Samples %in% recurrent_samples)$Samples))
-    sample_order <- c(not_recurrent_samples, recurrent_samples)
+get_gbm_order <- function(vector) {
+    re_samples <- unique(vector[grepl("Re", vector)])
+    not_re_samples <- unique(vector[!grepl("Re", vector)])
+    sample_order <- c(not_re_samples, re_samples)
     tumor_order <- unique(sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-2))))
     order_list <- list(sample_order, tumor_order)
-    return(order_list)
+    return(sample_order)
 }
 
-# get all sample names (which are the excel sheet names) from excel file
-excel_file <- "~/Desktop/GBM/immune_infiltration/danaher_analysis/danaher_genes_expression.xlsx"
-excel_samples <- excel_sheets(path = excel_file)
-# read in all sheets from excel file
-abundance_df <- data.frame()
-for ( name in excel_samples ) {
-  df <- as.data.frame(read_excel(excel_file, sheet=name))
-  categories <- unique(df$category)
-  for ( item in categories ) {
-    values <- filter(df, category == item)$abundance
-    final_list <- c()
-    for ( value in values ) {
-      abundance <- log2(value + 1)
-      final_list <- c(final_list, abundance)
-    }
-    abundance_value <- mean(final_list)
-    #print(abundance_value)
-    new_line <- cbind(Samples = name, Cell_Category = item, Normalized_Expression = abundance_value)
-    abundance_df <- rbind(abundance_df, new_line)
-  }
-}
+# final_df_norm 
+# samples
+# get sample order
+gbm_order <- get_gbm_order(samples)
+# gather samples to plot
+final_gather <- gather(final_df_norm, key="Samples", value="Norm. Expression", -Gene, -Cell.Type)
+final_norm_matrix <- as.matrix(column_to_rownames(final_df_norm[,-2], var = "Gene"))
 
 #function for factor to numeric: as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
 # convert factor to numeric
-abundance_df$Normalized_Expression <- as.numeric(levels(abundance_df$Normalized_Expression))[abundance_df$Normalized_Expression]
+#abundance_df$Normalized_Expression <- as.numeric(levels(abundance_df$Normalized_Expression))[abundance_df$Normalized_Expression]
 # get correct sample order and order on samples
-gbm_order <- get_gbm_order(abundance_df)
+# gbm_order <- get_gbm_order(abundance_df)
 #abundance_order <- factor_and_order(abundance_df, abundance_df$Samples, gbm_order[[1]])
-abundance_df$Samples <- factor(abundance_df$Samples, levels = gbm_order[[1]])
-abundance_order <- abundance_df[order(abundance_df$Samples),]
+# abundance_df$Samples <- factor(abundance_df$Samples, levels = gbm_order[[1]])
+# abundance_order <- abundance_df[order(abundance_df$Samples),]
 
 abundance_order <- filter(abundance_order, !Cell_Category %in% c("Exhausted CD8", "T-cells", "Cytotoxic cells", "NK CD56dim cells"))
 
@@ -167,22 +146,21 @@ ggplot(abundance_order, aes(x=Samples,  y=Cell_Category, fill=`Cell Type Score`)
 
 ## COMPLEX HEATMAP ##
 # spread sample names, expression values
-abundance_df.format <- spread(abundance_df, Samples, Normalized_Expression)#key = sample, value = abundance))
+#abundance_df.format <- spread(abundance_df, Samples, Normalized_Expression)#key = sample, value = abundance))
 # change cell categories to row names
-abundance_df.format <- column_to_rownames(abundance_df.format, loc=1)
+#abundance_df.format <- column_to_rownames(abundance_df.format, loc=1)
 # convert to matrix
-abundance_matrix <- as.matrix(abundance_df.format)
+#abundance_matrix <- as.matrix(abundance_df.format)
 # specify row/column order            
-row_orders <- rownames(abundance_df.format)
+row_orders <- rownames(final_df_norm)
 #column_orders <- excel_samples
-columns_orders <- gbm_order[[1]]
 
 # specify heatmap parameters
 col_fun = colorRamp2(c(1, 0.2, 0), c("red", "white", "blue"))
 col_fun(seq(-3, 3))
 
 # create Heatmap!
-Heatmap(df_matrix, name = "Enrichment Score", row_order = row_orders) #width = unit(28, "cm"), height = unit(15, "cm"))
+Heatmap(final_norm_matrix, name = "Enrichment Score", column_order = gsub('-', '\\.', gbm_order)) #width = unit(28, "cm"), height = unit(15, "cm"))
 
 #Heatmap(total_matrix, row_order = c("CD4","CD8A", "CD8B","CD3D", "CD3E", "CD3G", "PDCD1", "CD274"), name = "log(TPM)", width = unit(31, "cm"), height = unit(12, "cm"))
 #Heatmap(total_matrix, name = "log(TPM)", width = unit(31, "cm"), height = unit(25, "cm"), column_order = samples)

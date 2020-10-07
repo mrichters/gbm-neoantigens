@@ -39,13 +39,12 @@ create_initial_df <- function(input_file, transpose=TRUE) {
     return(results)
 }
 
-get_gbm_order <- function(df) {
-    recurrent_samples <- sort(as.character(unique(df[grep("Re", df$Samples), ]$Samples)))
-    not_recurrent_samples <- sort(as.character(unique(filter(df, !Samples %in% recurrent_samples)$Samples)))
-    sample_order <- c(not_recurrent_samples, recurrent_samples)
-    tumor_order <- sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-2)))
-    tumor_type <- sapply(sample_order, function(x) return(stri_extract_all_regex(x, "[a-zA-Z.]+")))
-    #order_list <- list(sample_order, tumor_order, tumor_type)
+get_gbm_order <- function(vector) {
+    re_samples <- unique(vector[grepl("Re", vector)])
+    not_re_samples <- unique(vector[!grepl("Re", vector)])
+    sample_order <- c(not_re_samples, re_samples)
+    tumor_order <- unique(sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-2))))
+    order_list <- list(sample_order, tumor_order)
     return(sample_order)
 }
 
@@ -87,15 +86,13 @@ format_names <- function(name) {
 }
 
 # setwd
-setwd("~/Desktop/GBM/immune_infiltration/xcell_new_rna/")
+setwd("~/Desktop/GBM/immune_infiltration/xcell/")
 
 # load files
-results <- read_tsv("xcell_results.txt")
-#pvalues <- read_tsv("xCell_abundance_matrix_all_genes_xCell_1315111319.pvals.txt")
+results <- read_tsv("xCell_kallisto_abundance_matrix_strandfix_09-21-20.txt")
 
 # create initial df
 xcell_df <- create_initial_df(results)
-xcell_df$Samples <- sapply(xcell_df$Samples, format_names)
 
 # get correct gbm sample/tumor order
 #gbm_order <- get_gbm_order(xcell_df)
@@ -116,9 +113,18 @@ column_totals <- apply(select_if(xcell_df, is.numeric), 2, sum)
 nonzero_cols <- names(Filter(function(x) x > 0, column_totals))
 xcell_df_subset <- xcell_df[,c("Samples", "Tumor", "Tumor_Type", nonzero_cols)]
 
-xcell_norm <- normalize(xcell_df_subset, margin=2, range = c(0,1), method="range")
-xcell_gather <- gather(xcell_norm, Cell_Type, Score, -Samples, -Tumor, -Tumor_Type)
+
+xcell_norm <- normalize(xcell_df_subset, method = "standardize", range = c(0,1), margin=1)
+
+#xcell_gather <- gather(xcell_norm, Cell_Type, Score, -Samples, -Tumor, -Tumor_Type)
 #xcell_order <- factor_and_order(xcell_gather, xcell_gather$Samples, sample_order)
+
+# create matrix for heatmap (Complex Heatmap)
+xcell_transpose <- as.data.frame(t(column_to_rownames(xcell_df_subset[,-c(2:3)], loc=1)))
+xcell_norm <- normalize(xcell_transpose, method = "range", range = c(0,1), margin=1)
+xcell_matrix <- as.matrix(xcell_norm)
+# create Heatmap!
+Heatmap(xcell_matrix, name = "Norm. xCell Score", row_order = rownames(xcell_transpose), column_order = get_gbm_order(names(xcell_transpose)),width = unit(30, "cm"), height = unit(24, "cm"))
 
 #### T CELLS ONLY SAMPLES ####
 # vector of columns I want to include

@@ -15,36 +15,35 @@ library(openxlsx)
 library(mgsub)
 
 # set wd
-setwd("~/Desktop/GBM")
+setwd("~/Desktop/GBM_plots")
 
 # list 3 gbm batches for analysis
-gbm_batches <- c("Batch1", "Batch2", "Batch3")
+#gbm_batches <- c("Batch1", "Batch2", "Batch3")
 
 # create unique list of variants for NimbleGen / manual review
 total_shared_value_df <- data.frame()
-sample_names <- c() #shorter sample names
-for ( batch in gbm_batches ) {
-  variant_path <- paste("~/Desktop/GBM/gbm_google_drive/", batch, "_annotated_variants.xlsx", sep="")
-  samples <- excel_sheets(path = variant_path)
-  tumors <- unique(sapply(samples, function(v) return(unlist(strsplit(v, '-'))[2])))
-  for ( tumor in tumors ) {
+
+variant_path <- paste0("~/Desktop/GBM/", "final_merged_annotated_variants.xlsx")
+samples <- excel_sheets(path = variant_path)
+tumors <- unique(sapply(samples, function(x) return(unlist(strsplit(x, '-'))[1])))
+  
+for ( tumor in tumors ) {
     tumor_df <- c()
     for ( name in samples[grep(tumor, samples)] ) {
       # read in correct batch variant excel file
       df <- as.data.frame(read_excel(variant_path, sheet = name))
       # create standardized shorter sample names
-      if ( grepl("Re", name) == TRUE ) {
-          new_name <-  paste(paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = "."), str_sub(name, -1, -1), sep = '-')
-          tumor <- paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = ".")
-      } else if ( batch == "Batch3") { 
-          new_name <- mgsub(name, c("19-", "Tumor", "_"), c("", "", "-"))
-          tumor <- unlist(strsplit(new_name, '-'))[1]
-      } else if ( grepl("Re", name) == FALSE ) {
-          new_name <- paste(unlist(str_split(name, '-'))[2], str_sub(name, -1, -1), sep = '-')
-          tumor <- unlist(str_split(name, '-'))[2]
-      } 
-      # add to sample_names df
-      sample_names <- c(sample_names, new_name)
+      # if ( grepl("Re", name) == TRUE ) {
+      #     new_name <-  paste(paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = "."), str_sub(name, -1, -1), sep = '-')
+      #     #tumor <- paste("Re", str_sub(unlist(str_split(name, '-'))[2], 1, 6), sep = ".")
+      # } else if ( batch == "Batch3") { 
+      #     new_name <- mgsub(name, c("19-", "Tumor", "_"), c("", "", "-"))
+      #     #tumor <- unlist(strsplit(new_name, '-'))[1]
+      # } else if ( grepl("Re", name) == FALSE ) {
+      #     new_name <- paste(unlist(str_split(name, '-'))[2], str_sub(name, -1, -1), sep = '-')
+      #     #tumor <- unlist(str_split(name, '-'))[2]
+      # } 
+      new_name <- name
       # add to tumor_df
       df.cbind <- cbind(df[, c("CHROM", "POS", "REF", "ALT", "SYMBOL", "Protein_position", "Amino_acids")], Sample = new_name, Tumor = tumor, Value = 1)
       df.final <- df.cbind %>%
@@ -54,9 +53,10 @@ for ( batch in gbm_batches ) {
     # add tumor_df to final total_shared_value_df
     total_shared_value_df <- rbind(total_shared_value_df, tumor_df)
   }
-}
+#}
 # change Sample to character
 total_shared_value_df$Sample <- as.character(total_shared_value_df$Sample)
+### stop here for variant counts plot ###
 # count unique variants
 counts_df <- count(total_shared_value_df[ ,1])
 counts_df$x <- as.character(counts_df$x)
@@ -96,7 +96,7 @@ for ( tumor in unique(total_shared_value_df$Tumor) ) {
         cancer_type <- filter(brmet_types, Tumor == tumor)$`Cancer Type`
         tumor_type <- "BrMET"
     } else if ( grepl("Re", tumor) ) {
-        tumor_type <- "Recurrent GBM"
+        tumor_type <- "GBM"
         cancer_type <- "Recurrent GBM"
     } else {
         tumor_type <- "GBM"
@@ -114,8 +114,9 @@ final_tumor_counts_df <- final_tumor_counts_df[order(final_tumor_counts_df$Cance
 
 colnames(final_tumor_counts_df) <- gsub('\\.', " ", colnames(final_tumor_counts_df))
 # plot
-ggplot(final_tumor_counts_df, aes(x=`Tumor Type`, y=Unique_Counts)) + theme(panel.background = element_rect(fill = "white", colour = "black", size=1), panel.grid.major = element_line(colour = "grey90")) + geom_boxplot(notch=FALSE, outlier.shape = NA,fill="grey90") + geom_jitter(position=position_jitter(0.2),aes(color=`Cancer Type`), size=3) + theme(axis.text.x = element_text(angle = 45, hjust = 1), text = element_text(size=12),axis.title.x = element_blank()) + ylab("Variant Count") + scale_color_manual(values = pal_jama("default", alpha=0.9)(7)[1:7]) + coord_trans(y="log2") + scale_y_continuous(breaks=c(100,500,1000,2000,4000,6000))
+ggplot(final_tumor_counts_df, aes(x=`Tumor Type`, y=Unique_Counts)) + theme(panel.background = element_rect(fill = "white", colour = "black", size=1), panel.grid.major = element_line(colour = "grey90")) + geom_violin(fill = "grey90") + geom_jitter(position=position_jitter(0.1),aes(color=`Cancer Type`), size=3) + theme(axis.text.x = element_text(angle = 45, hjust = 1), text = element_text(size=12),axis.title.x = element_blank()) + ylab("Variant Count") + scale_color_manual(values = pal_jama("default", alpha=0.9)(7)[1:7]) + coord_trans(y="log2") + scale_y_continuous(breaks=c(100,500,1000,2000,4000,6000))
 
+# geom_boxplot(notch=FALSE, outlier.shape = NA,fill="grey90")
 
 ################# FORMATTING LIFTOVER VARIANTS from final file ^^ ####################
 setwd("~/Desktop/GBM/targeted_resequencing/")
