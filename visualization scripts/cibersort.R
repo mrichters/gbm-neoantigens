@@ -8,7 +8,7 @@ library(RColorBrewer)
 
 # set wd
 setwd("~/Desktop/GBM/immune_infiltration/cibersort/")
-input_file <- "CIBERSORT.Output_strandfix.xlsx"
+input_file <- "CIBERSORT.Output.xlsx"
 
 # format_names <- function(name) {
 #     if ( grepl("Re", name) ) {
@@ -61,31 +61,57 @@ df_celltypes.tidy <- df_celltypes.tidy[order(df_celltypes.tidy$`Input Sample`), 
 colnames(df_celltypes.tidy) <- c("Samples", "Cell Type", "Proportion")
 
 # create a color palette 
-getPalette = colorRampPalette(brewer.pal(12, "Set3"))
-color_palette <- plasma(22)
-my_pal <- c(pal_nejm("default")(7), pal_npg("nrc")(10), pal_simpsons("springfield")(5))
+getPalette = colorRampPalette(brewer.pal(8, "Set1"))
+color_palette <- heat.colors(8)
+my_pal <- brewer.pal(8, "Set1") #pal_npg("nrc")(8) #, pal_npg("nrc")(10), pal_simpsons("springfield")(5))
 
 # make a stacked bar plot showing proportions of cell types per sample
 # really messy because 22 cell types
-ggplot(df_celltypes.tidy, aes(x=Samples, y=Proportion, fill=`Cell Type`)) + geom_bar(stat="identity", width=0.95)+ theme(legend.position="top", axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill=guide_legend(title="Cell Type")) + scale_fill_manual(values = color_palette)
+ggplot(df_celltypes.tidy, aes(x=Samples, y=Proportion, fill=`Mod_cell_type`)) + geom_bar(stat="identity", width=0.95)+ theme(legend.position="top", axis.text.x = element_text(angle = 45, hjust = 1), text = element_text(size=6)) + guides(fill=guide_legend(title="Cell Type")) + scale_fill_manual(values = viridis(8)) + coord_cartesian(expand = F)
 
 #### COMBINE CELL TYPES FOR CLEARER PLOT ####
 # make these into lists
 # combined cell types
-CD8_cells <- list("CD8+ T cells", "T cells CD8")
-CD4_cells <- list("CD4+ T cells", "T cells CD4 memory activated", "T cells CD4 naive", "T cells CD4 memory resting", "T cells follicular helper")
-B_cells <- list("B cells", "B cells naive", "B cells memory")
-NK_cells <- list("NK cells", "NK cells resting", "NK cells activated")
-DC_cells <- list("DC cells", "Dendritic cells activated", "Dendritic cells resting")
-Macrophages <- list("Macrophages", "Macrophages M0", "Macrophages M1", "Macrophages M2")
-Monocytes <- list("Monocytes")
-Other <- list("Other", "Neutrophils", "Eosinophils", "Mast cells activated", "Mast cells resting", "Plasma cells", "T cells gamma delta", "T cells regulatory (Tregs)")
+CD8_cells <- c("CD8+ T cells", "T cells CD8")
+CD4_cells <- c("CD4+ T cells", "T cells CD4 memory activated", "T cells CD4 naive", "T cells CD4 memory resting", "T cells follicular helper")
+B_cells <- c("B cells", "B cells naive", "B cells memory")
+NK_cells <- c("NK cells", "NK cells resting", "NK cells activated")
+DC_cells <- c("DC cells", "Dendritic cells activated", "Dendritic cells resting")
+Macrophages <- c("Macrophages", "Macrophages M0", "Macrophages M1", "Macrophages M2")
+Monocytes <- c("Monocytes")
+Other <- c("Other", "Neutrophils", "Eosinophils", "Mast cells activated", "Mast cells resting", "Plasma cells", "T cells gamma delta", "T cells regulatory (Tregs)")
 # combined cell types vector 
 cell_types <- list(CD8_cells = CD8_cells, CD4_cells = CD4_cells, B_cells = B_cells, NK_cells = NK_cells, DC_cells = DC_cells, Macrophages = Macrophages, Monocytes = Monocytes, Other = Other)
 
+CellTYPE <- list(CD8_cells, CD4_cells, B_cells, NK_cells, DC_cells, Macrophages, Monocytes, Other)
+
+df_celltypes.tidy$`Mod Cell Type` <- "type"
+for (i in 1:nrow(df_celltypes.tidy)) {
+    for (j in Cell.types) {
+        print(df_celltypes.tidy[1,"Cell Type"])
+        if (filter(i, `Cell Type` %in% j)) {
+            df_celltypes.tidy[i, "Mod. Cell Type"] <- j
+        }
+    }
+}
+
+# access cell type per line
+find_types <- function(v) {
+    for (j in 1:length(cell_types)) {
+        #print(cell_types[[j]][1])
+        if (v %in% cell_types[[j]]) {
+            return(cell_types[[j]][1])
+        }
+    }
+}
+test <- sapply(df_celltypes.tidy$`Cell Type`, find_types)
+# see if cell type is in loop of general cell type vectors
+# if yes replace row entry with general cell type
+
+find_types("Neutrophils")
 # create total_df for plotting combined cell types
 #tumors <- unique(sapply(df_celltypes.tidy$Samples, function(x) return(substr(x, 1, nchar(x)-2))))
-samples <- unique(df_celltypes.tidy$Samples)
+samples <- unique(df_celltypes.tidy$`Input Sample`)
 total_df <- data.frame()
 for ( item in samples ) {
     sample_df <- data.frame()

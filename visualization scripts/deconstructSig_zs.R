@@ -15,20 +15,17 @@ library(mgsub)
 
 setwd("~/Desktop/GBM/deconstructSigs/")
 
+# variant samples / tumors
+variant_path <- "~/Desktop/GBM/gbm_google_drive/merged_annotated_variants.xlsx"
+samples <- excel_sheets(path = variant_path)
+tumors <- unique(sapply(samples, function(x) return(unlist(strsplit(x, '-'))[1])))
+
 # read in data  
-read_data <- function(batch) {
-  final_df <- c()
-  variant_path <- paste("~/Desktop/GBM/gbm_google_drive/", batch, "_annotated_variants.xlsx", sep="")
-  samples <- excel_sheets(path = variant_path)
-  if ( batch == "Batch3") {
-    tumors <- unique(sapply(mgsub(samples, c("19-", "_"), c("", "-")), function(v) return(unlist(strsplit(v, '-'))[1])))
-  } else {
-    tumors <- unique(sapply(samples, function(v) return(unlist(strsplit(v, '-'))[2])))
-  }
+read_data <- function(tumors) {
   for (tumor in tumors) {
     tumor_df <- c()
     for ( name in samples[grep(tumor, samples)] ) {
-      myData <- read_excel(variant_path, sheet = name)
+      myData <- read_excel("~/Desktop/GBM/gbm_google_drive/merged_annotated_variants.xlsx", sheet = name)
       myData <- myData[,c("CHROM", "POS", "REF", "ALT")]
       myData <- myData[,c("CHROM", "POS", "REF", "ALT")]
       colnames(myData) <- c("Chromosome", "Stop", "Reference", "Variant")
@@ -42,7 +39,7 @@ read_data <- function(batch) {
   return(final_df)
 }
 
-batch1 <- read_data("Batch1")
+batch1 <- read_data(tumors)
 batch2 <- read_data("Batch2")
 batch3 <- read_data("Batch3")
 

@@ -4,6 +4,7 @@ library(readxl)
 library(wesanderson)
 library(viridis)
 library(gtools)
+library(patchwork)
 
 get_gbm_order <- function(df) {
     recurrent_samples <- as.character(unique(df[grep("Re", df$Samples), ]$Samples))
@@ -31,26 +32,25 @@ setwd("~/Desktop/GBM/cnvkit/07.2020/")
 
 files=c("gbm_0.1/scores.gistic", "brmet_lung/scores.gistic", "brmet_breast/scores.gistic")
 
-sig_value <- 0.10
-#G_value <- 0.24
-gbm <- create_cnv_df(files[1])
-gbm_amp <-filter(gbm, Type == "Amp" & q_value >= -log(sig_value))
-gbm_amp_G <- mean(filter(gbm_amp, q_value == min(gbm_amp$q_value))$G_score)
-gbm_del <- filter(gbm, Type == "Del" & q_value >= -log(sig_value))
-gbm_del_G <- mean(filter(gbm_del, q_value == min(gbm_del$q_value))$G_score)
+plot_cnv <- function(file, sig_value, sig_G_values, plot_title) {
+    df <- create_cnv_df(file)
+    df_amp <-filter(df, Type == "Amp" & q_value >= -log(sig_value))
+    amp_G <- mean(filter(df_amp, q_value == min(df_amp$q_value))$G_score)
+    df_del <- filter(df, Type == "Del" & q_value >= -log(sig_value))
+    del_G <- mean(filter(df_del, q_value == min(df_del$q_value))$G_score)
+    if ( is.nan(del_G) ) {
+        del_G <- -amp_G
+    }
+    # plot
+    ggplot(data=df, aes(x=Start, y=G_score, color=Type)) + geom_line() + geom_area(aes(fill=Type)) + geom_hline(yintercept = sig_G_values, linetype="dashed") + facet_wrap( ~ Chromosome, scales="free_x", nrow = 1) + theme_bw() + theme(axis.title.x = element_blank(), axis.ticks.x = element_blank(), axis.text.x = element_blank(), plot.title = element_text(hjust = 0.5), legend.position = "none") + ylab("G-score") + scale_y_continuous(breaks=c(-3,-2,-1,0,1,2,3,4)) + scale_color_manual(values = c("red", "blue")) + scale_fill_manual(values = c("red", "blue")) + ggtitle(plot_title)
+}
 
-brmet <- create_cnv_df(files[2])
-brmet_amp <-filter(brmet, Type == "Amp" & q_value >= -log(sig_value))
-brmet_amp_G <- mean(filter(brmet_amp, q_value == min(brmet_amp$q_value))$G_score)
-brmet_del <- filter(brmet, Type == "Del" & q_value >= -log(sig_value))
-brmet_del_G <- mean(filter(brmet_del, q_value == min(brmet_del$q_value))$G_score)
+gbm <- plot_cnv("gbm_0.1/scores.gistic", 0.10, c(0.24,-0.23), "GBM")
+lung <- plot_cnv("brmet_lung/scores.gistic", 0.10, 0.78, "BrMET NSCLC")
+brca <- plot_cnv("brmet_breast/scores.gistic", 0.10, c(1.4,-0.95), "BrMET BRCA")
 
 
-p1 <- ggplot(data=gbm, aes(x=Start, y=G_score, color=Type)) + geom_line() + geom_area(aes(fill=Type)) + geom_hline(yintercept = c(0.24, -0.23), linetype="dashed") + facet_wrap( ~ Chromosome, scales="free_x", nrow = 1) + theme_bw() + theme(axis.title.x = element_blank(), axis.ticks.x = element_blank(), axis.text.x = element_blank(), plot.title = element_text(hjust = 0.5), legend.position = "none") + ylab("G-score") + scale_y_continuous(breaks=c(-3,-2,-1,0,1,2,3), limits=c(-1.5,2.7)) + scale_color_manual(values = c("red", "blue")) + scale_fill_manual(values = c("red", "blue")) + ggtitle("GBM cohort")
-
-p2 <- ggplot(data=brmet, aes(x=Start, y=G_score, color=Type)) + geom_line() + geom_area(aes(fill=Type)) + geom_hline(yintercept = c(0.78, -0.8), linetype="dashed") + facet_wrap( ~ Chromosome, scales="free_x", nrow = 1) + theme_bw() + theme(axis.title.x = element_blank(), axis.ticks.x = element_blank(), axis.text.x = element_blank(), plot.title = element_text(hjust = 0.5), legend.position = "none") + ylab("G-score") + scale_y_continuous(breaks=c(-3,-2,-1,0,1,2,3,4,5,6)) + scale_color_manual(values = c("red", "blue")) + scale_fill_manual(values = c("red", "blue")) + ggtitle("BrMET NSCLC cohort")
-
-p_left <- grid.arrange(p1, p2, nrow = 2)
+cnv_combined_plot <- gbm / lung / brca
 
 #### heatmap with threshold per sample (qvalue corresponds to peak itself) ####
 
