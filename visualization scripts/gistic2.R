@@ -10,10 +10,10 @@ get_gbm_order <- function(df) {
     recurrent_samples <- as.character(unique(df[grep("Re", df$Samples), ]$Samples))
     not_recurrent_samples <- as.character(unique(filter(df, !Samples %in% recurrent_samples)$Samples))
     sample_order <- c(not_recurrent_samples, recurrent_samples)
-    tumor_order <- unique(sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-4))))
-    tumor_order_short <- sapply(tumor_order, function(x) return(unlist(strsplit(x, '-'))[2]))
-    order_list <- tumor_order
-    return(order_list)
+    #tumor_order <- unique(sapply(sample_order, function(x) return(substr(x, 1, nchar(x)-4))))
+    #tumor_order_short <- sapply(tumor_order, function(x) return(unlist(strsplit(x, '-'))[2]))
+    #order_list <- tumor_order
+    return(sample_order)
 }
 
 # for input into this function, need to first fix file header
